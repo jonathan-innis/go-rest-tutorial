@@ -2,9 +2,12 @@ package database
 
 import (
 	"context"
+	"errors"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type MongoDB struct {
@@ -15,30 +18,61 @@ func NewMongoDB(collection *mongo.Collection) *MongoDB {
 	return &MongoDB{collection: collection}
 }
 
-func (db *MongoDB) Create(ctx context.Context, item interface{}) error {
-	_, err := db.collection.InsertOne(ctx, item)
+func (db *MongoDB) Create(ctx context.Context, item interface{}) (primitive.ObjectID, error) {
+	res, err := db.collection.InsertOne(ctx, item)
 	if err != nil {
+		return primitive.NilObjectID, err
+	}
+	return res.InsertedID.(primitive.ObjectID), nil
+}
+
+func (db *MongoDB) Update(ctx context.Context, item interface{}, idStr string) error {
+	id, err := primitive.ObjectIDFromHex(idStr)
+	if err != nil {
+		return err
+	}
+	if _, err := db.collection.UpdateByID(ctx, id, bson.M{"$set": item}, options.Update().SetUpsert(true)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (db *MongoDB) List(ctx context.Context, model interface{}) ([]interface{}, error) {
+func (db *MongoDB) Get(ctx context.Context, idStr string, model interface{}) (bool, error) {
+	id, err := primitive.ObjectIDFromHex(idStr)
+	if err != nil {
+		return false, err
+	}
+	if err := db.collection.FindOne(ctx, bson.M{"_id": id}).Decode(model); errors.Is(mongo.ErrNoDocuments, err) {
+		return false, nil
+	} else if err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func (db *MongoDB) List(ctx context.Context, models interface{}) error {
 	cur, err := db.collection.Find(ctx, bson.M{})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer cur.Close(ctx)
-	var res []interface{}
-	for cur.Next(ctx) {
-		err := cur.Decode(model)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, model)
+	if err := cur.All(ctx, models); err != nil {
+		return err
 	}
-	if err := cur.Err(); err != nil {
-		return nil, err
+	print(models)
+	return nil
+}
+
+func (db *MongoDB) Delete(ctx context.Context, idStr string) (bool, error) {
+	id, err := primitive.ObjectIDFromHex(idStr)
+	if err != nil {
+		return false, err
 	}
-	return res, nil
+	res, err := db.collection.DeleteOne(ctx, bson.M{"_id": id})
+	if res.DeletedCount == 0 {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
 }

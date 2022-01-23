@@ -2,7 +2,6 @@ package helper
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 )
 
@@ -11,11 +10,14 @@ type ErrorResponse struct {
 	ErrorMessage string `json:"message"`
 }
 
-func GetError(err error, w http.ResponseWriter) {
-	log.Fatal(err.Error())
+func GetInternalError(w http.ResponseWriter, err error) {
+	GetError(w, http.StatusInternalServerError, err.Error())
+}
+
+func GetError(w http.ResponseWriter, code int, errorMessage string) {
 	var response = ErrorResponse{
-		ErrorMessage: err.Error(),
-		StatusCode:   http.StatusInternalServerError,
+		ErrorMessage: errorMessage,
+		StatusCode:   code,
 	}
 
 	message, _ := json.Marshal(response)
