@@ -59,7 +59,6 @@ func (db *MongoDB) List(ctx context.Context, models interface{}) error {
 	if err := cur.All(ctx, models); err != nil {
 		return err
 	}
-	print(models)
 	return nil
 }
 
